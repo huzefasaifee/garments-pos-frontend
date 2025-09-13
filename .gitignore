@@ -1,5 +1,3 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
 /node_modules
 /.pnp
@@ -8,8 +6,9 @@
 # testing
 /coverage
 
-# production
+# production builds
 /build
+/dist
 
 # misc
 .DS_Store
@@ -21,3 +20,8 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# VS Code (ignore everything except debug configs)
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
