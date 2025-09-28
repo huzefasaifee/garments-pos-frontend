@@ -31,7 +31,8 @@ const GarmentsPOSSystem = () => {
   const [bulkImportData, setBulkImportData] = useState('');
   const [editingProduct, setEditingProduct] = useState(null);
 
-  const API_BASE = 'http://localhost:3001/api';
+  //const API_BASE = 'http://localhost:3001/api';
+  const API_BASE = 'https://posapi.nileit.co.in';
 
   // API Helper Functions
   const apiCall = async (endpoint, options = {}) => {
