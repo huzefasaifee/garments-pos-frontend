@@ -257,11 +257,16 @@ const GarmentsPOSSystem = () => {
     setLoading(false);
   };
 
-  // Generate barcode (simple sequential)
-  const generateBarcode = () => {
-    const timestamp = Date.now().toString().slice(-10);
-    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-    return `890${timestamp}${random}`;
+  const generateBarcodeAtServer = async () => {
+    try {
+      const barcode = await apiCall('/barcode/generate', {
+        method: 'POST',
+      });
+      //setCategories(categoryList);
+      return barcode.barcode;
+    } catch (err) {
+      console.error('Failed to generate barcode:', err);
+    }
   };
 
   // Add new product
@@ -273,9 +278,10 @@ const GarmentsPOSSystem = () => {
 
     setLoading(true);
     try {
+      var barcode = await generateBarcodeAtServer();
       const productData = {
         ...newProduct,
-        barcode: newProduct.barcode || generateBarcode(),
+        barcode: newProduct.barcode || barcode,
         price: parseFloat(newProduct.price),
         stock: parseInt(newProduct.stock)
       };
@@ -330,52 +336,59 @@ const GarmentsPOSSystem = () => {
     }
   };
 
-  // Bulk import products
-  const bulkImportProducts = async () => {
-    if (!bulkImportData.trim()) {
-      setError('Please enter product data');
-      return;
+ const bulkImportProducts = async () => {
+  if (!bulkImportData.trim()) {
+    setError('Please enter product data');
+    return;
+  }
+
+  try {
+    setLoading(true);
+    
+    // Parse CSV-like data
+    const lines = bulkImportData.trim().split('\n');
+    const products = [];
+    for (const [index, line] of lines.entries()) {
+      const [name, size, color, price, stock, barcode, category, brand] =
+        line.split(',').map(item => item.trim());
+
+      const barCodeFromServer = barcode || await generateBarcodeAtServer(); // wait one at a time
+
+      if (!name || !size || !price || !stock || !category || !barCodeFromServer) {
+        throw new Error(`Row ${index + 1}: Missing required fields`);
+      }
+
+      products.push({
+        name,
+        size,
+        color: color || 'Mixed',
+        price: parseFloat(price),
+        stock: parseInt(stock, 10),
+        barcode: barCodeFromServer,
+        category,
+        brand: brand || 'Generic',
+      });
     }
 
-    try {
-      // Parse CSV-like data
-      const lines = bulkImportData.trim().split('\n');
-      const products = lines.map((line, index) => {
-        const [name, size, color, price, stock, barcode, category, brand] = line.split(',').map(item => item.trim());
+    // Send to API
+    await apiCall('/products/bulk-import', {
+      method: 'POST',
+      body: JSON.stringify({ products }),
+    });
 
-        if (!name || !size || !price || !stock || !category) {
-          throw new Error(`Row ${index + 1}: Missing required fields`);
-        }
-
-        return {
-          name,
-          size,
-          color: color || 'Mixed',
-          price: parseFloat(price),
-          stock: parseInt(stock),
-          barcode: barcode || generateBarcode(),
-          category,
-          brand: brand || 'Generic'
-        };
-      });
-
-      setLoading(true);
-      await apiCall('/products/bulk-import', {
-        method: 'POST',
-        body: JSON.stringify({ products }),
-      });
-
-      setBulkImportData('');
-      setShowBulkImport(false);
-      await refreshData();
-      setError('');
-      alert(`Successfully imported ${products.length} products!`);
-    } catch (err) {
-      setError(err.message || 'Failed to import products');
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Success cleanup
+    setBulkImportData('');
+    setShowBulkImport(false);
+    await refreshData();
+    setError('');
+    alert(`Successfully imported ${products.length} products!`);
+    
+  } catch (err) {
+    setError(err.message || 'Failed to import products');
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Filter inventory based on search term
 const filteredInventory = inventory.filter(item => {
