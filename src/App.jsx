@@ -31,7 +31,7 @@ const GarmentsPOSSystem = () => {
   const [bulkImportData, setBulkImportData] = useState('');
   const [editingProduct, setEditingProduct] = useState(null);
 
-  //const API_BASE = 'http://localhost:3001/api';
+  //const API_BASE = 'http://localhost:3002/api'; // port 3002 for development
   const API_BASE = 'https://posapi.nileit.co.in/api';
 
   // API Helper Functions
@@ -336,6 +336,50 @@ const GarmentsPOSSystem = () => {
     }
   };
 
+  // Open edit modal for a product
+  const openEditProduct = (product) => {
+    setEditingProduct({ ...product });
+  };
+
+  // Save edited product to server
+  const saveEditedProduct = async () => {
+    if (!editingProduct) return;
+
+    // Basic validation
+    if (!editingProduct.name || !editingProduct.size || !editingProduct.price || editingProduct.stock === undefined) {
+      setError('Please fill required fields (name, size, price, stock)');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const updated = {
+        name: editingProduct.name,
+        size: editingProduct.size,
+        color: editingProduct.color,
+        price: parseFloat(editingProduct.price),
+        stock: parseInt(editingProduct.stock, 10),
+        barcode: editingProduct.barcode,
+        category: editingProduct.category,
+        brand: editingProduct.brand
+      };
+
+      await apiCall(`/products/barcode/${editingProduct.barcode}`, {
+        method: 'PUT',
+        body: JSON.stringify(updated),
+      });
+
+      setEditingProduct(null);
+      await loadInventory();
+      setError('');
+      alert('Product updated successfully!');
+    } catch (err) {
+      setError('Failed to update product');
+    } finally {
+      setLoading(false);
+    }
+  };
+
  const bulkImportProducts = async () => {
   if (!bulkImportData.trim()) {
     setError('Please enter product data');
@@ -427,6 +471,98 @@ const filteredInventory = inventory.filter(item => {
           </button>
         </div>
       )}
+
+        {/* Edit Product Modal */}
+        {editingProduct && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+              <h3 className="text-xl font-semibold mb-4">Edit Product</h3>
+              <div className="space-y-4">
+                <input
+                  type="text"
+                  placeholder="Product Name *"
+                  value={editingProduct.name}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <div className="grid grid-cols-2 gap-4">
+                  <input
+                    type="text"
+                    placeholder="Size *"
+                    value={editingProduct.size}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, size: e.target.value })}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Color"
+                    value={editingProduct.color}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, color: e.target.value })}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <input
+                    type="number"
+                    placeholder="Price *"
+                    value={editingProduct.price}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, price: e.target.value })}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Stock *"
+                    value={editingProduct.stock}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, stock: e.target.value })}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <select
+                  value={editingProduct.category}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select Category *</option>
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                  <option value="Other">Other</option>
+                </select>
+                <div className="grid grid-cols-2 gap-4">
+                  <input
+                    type="text"
+                    placeholder="Brand"
+                    value={editingProduct.brand}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, brand: e.target.value })}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Barcode"
+                    value={editingProduct.barcode}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, barcode: e.target.value })}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 mt-6">
+                <button
+                  onClick={saveEditedProduct}
+                  disabled={loading}
+                  className="w-full sm:flex-1 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button
+                  onClick={() => setEditingProduct(null)}
+                  className="w-full sm:flex-1 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       
 
@@ -775,6 +911,12 @@ Formal Shirt, L, White, 899, 8, 8901234567892, Shirts, FormalFit"
                             className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-sm mr-2"
                           >
                             Restock
+                          </button>
+                          <button
+                            onClick={() => openEditProduct(item)}
+                            className="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors text-sm mr-2"
+                          >
+                            Edit
                           </button>
                         </td>
                       </tr>
