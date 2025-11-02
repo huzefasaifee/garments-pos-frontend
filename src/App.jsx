@@ -399,7 +399,7 @@ const filteredInventory = inventory.filter(item => {
 });
 
   return (
-    <div className="max-w-7xl mx-auto p-6 bg-gray-50 min-h-screen">
+  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 bg-gray-50 min-h-screen">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-800">
           Readymade Garments POS System
@@ -431,7 +431,7 @@ const filteredInventory = inventory.filter(item => {
       
 
       {/* Navigation Tabs */}
-      <div className="flex mb-6 bg-white rounded-lg shadow-sm">
+  <div className="flex flex-col sm:flex-row mb-6 bg-white rounded-lg shadow-sm">
         <button
           onClick={() => setActiveTab('billing')}
           className={`flex-1 py-3 px-6 text-center font-medium rounded-l-lg transition-colors ${activeTab === 'billing' ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-100'
@@ -476,7 +476,7 @@ const filteredInventory = inventory.filter(item => {
 
       {/* Billing Tab */}
       {activeTab === 'billing' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Barcode Scanner */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-semibold mb-4 text-gray-800">Barcode Scanner</h2>
@@ -571,17 +571,17 @@ const filteredInventory = inventory.filter(item => {
       {activeTab === 'stock' && (
         <div className="space-y-6">
           {/* Action Buttons */}
-          <div className="flex gap-4 mb-6">
+          <div className="flex flex-col sm:flex-row gap-4 mb-6">
             <button
               onClick={() => setShowAddProduct(true)}
-              className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
+              className="w-full sm:w-auto px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
             >
               <Plus className="inline mr-2" size={20} />
               Add New Product
             </button>
             <button
               onClick={() => setShowBulkImport(true)}
-              className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
+              className="w-full sm:w-auto px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
             >
               <Package className="inline mr-2" size={20} />
               Bulk Import
@@ -661,17 +661,17 @@ const filteredInventory = inventory.filter(item => {
                     />
                   </div>
                 </div>
-                <div className="flex gap-3 mt-6">
+                <div className="flex flex-col sm:flex-row gap-3 mt-6">
                   <button
                     onClick={addNewProduct}
                     disabled={loading}
-                    className="flex-1 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+                    className="w-full sm:flex-1 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
                   >
                     {loading ? 'Adding...' : 'Add Product'}
                   </button>
                   <button
                     onClick={() => setShowAddProduct(false)}
-                    className="flex-1 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                    className="w-full sm:flex-1 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
                   >
                     Cancel
                   </button>
@@ -698,17 +698,17 @@ Denim Jeans, 32, Dark Blue, 1299, 15, 8901234567891, Jeans, DenimCo
 Formal Shirt, L, White, 899, 8, 8901234567892, Shirts, FormalFit"
                   className="w-full h-40 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
-                <div className="flex gap-3 mt-6">
+                <div className="flex flex-col sm:flex-row gap-3 mt-6">
                   <button
                     onClick={bulkImportProducts}
                     disabled={loading}
-                    className="flex-1 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+                    className="w-full sm:flex-1 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
                   >
                     {loading ? 'Importing...' : 'Import Products'}
                   </button>
                   <button
                     onClick={() => setShowBulkImport(false)}
-                    className="flex-1 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                    className="w-full sm:flex-1 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
                   >
                     Cancel
                   </button>

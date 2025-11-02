@@ -36,3 +36,23 @@
     transform: rotate(360deg);
   }
 }
+
+/* Responsive tweaks for small screens */
+@media (max-width: 640px) {
+  .App-header {
+    padding: 1rem;
+    font-size: calc(8px + 2vmin);
+  }
+
+  /* Make table cells wrap and reduce font-size slightly for mobile */
+  table th, table td {
+    white-space: normal;
+    word-break: break-word;
+    font-size: 0.95rem;
+  }
+
+  /* Helper utility class for full-width buttons on small screens */
+  .full-sm {
+    width: 100%;
+  }
+}
