@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Package, ShoppingCart, Scan, Plus, Minus, Trash2, BarChart3, RefreshCw, AlertCircle, Search } from 'lucide-react';
-
+import { API_BASE } from './config';
+import { getAuthToken, clearAuthToken } from './lib/auth';
 const GarmentsPOSSystem = () => {
+  const navigate = useNavigate();
   const [inventory, setInventory] = useState([]);
   const [cart, setCart] = useState([]);
   const [barcodeInput, setBarcodeInput] = useState('');
@@ -31,18 +34,25 @@ const GarmentsPOSSystem = () => {
   const [bulkImportData, setBulkImportData] = useState('');
   const [editingProduct, setEditingProduct] = useState(null);
 
-  //const API_BASE = 'http://localhost:3002/api'; // port 3002 for development
-  const API_BASE = 'https://posapi.nileit.co.in/api';
+
 
   // API Helper Functions
   const apiCall = async (endpoint, options = {}) => {
     try {
+      const token = getAuthToken();
       const response = await fetch(`${API_BASE}${endpoint}`, {
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         ...options,
       });
+
+      if (response.status === 401) {
+        clearAuthToken();
+        navigate('/login');
+        throw new Error('Session expired');
+      }
 
       if (!response.ok) {
         throw new Error(`API Error: ${response.status}`);
@@ -448,14 +458,25 @@ const filteredInventory = inventory.filter(item => {
         <h1 className="text-3xl font-bold text-gray-800">
           Readymade Garments POS System
         </h1>
-        <button
-          onClick={refreshData}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={refreshData}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+          <button
+            onClick={() => {
+              clearAuthToken();
+              navigate('/login');
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
       {/* Error Display */}
