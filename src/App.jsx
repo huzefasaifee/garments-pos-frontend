@@ -14,6 +14,7 @@ const GarmentsPOSSystem = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [customerName, setCustomerName] = useState('');
+  const [cartDiscount, setCartDiscount] = useState('');
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -212,9 +213,19 @@ const GarmentsPOSSystem = () => {
     setCart(cart.filter(item => item.id !== id));
   };
 
-  // Calculate total
-  const calculateTotal = () => {
+  const calculateSubtotal = () => {
     return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+  };
+
+  const getCartDiscountAmount = () => {
+    const discount = parseFloat(cartDiscount) || 0;
+    return Math.max(0, discount);
+  };
+
+  const calculateTotal = () => {
+    const subtotal = calculateSubtotal();
+    const discount = getCartDiscountAmount();
+    return Math.max(0, subtotal - discount);
   };
 
   // Process sale and update database
@@ -229,6 +240,7 @@ const GarmentsPOSSystem = () => {
       const saleData = {
         items: cart,
         total: calculateTotal(),
+        cartDiscount: getCartDiscountAmount(),
         customerName: customerName.trim() || null
       };
 
@@ -245,6 +257,7 @@ const GarmentsPOSSystem = () => {
       // Clear cart and customer name
       setCart([]);
       setCustomerName('');
+      setCartDiscount('');
       setError('');
       alert('Sale completed successfully!');
     } catch (err) {
@@ -707,8 +720,35 @@ const filteredInventory = inventory.filter(item => {
                   </div>
                 ))}
                 <div className="border-t pt-3 mt-4">
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-lg font-semibold">Total: ₹{calculateTotal()}</span>
+                  <div className="mb-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Cart discount (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={cartDiscount}
+                      onChange={(e) => setCartDiscount(e.target.value)}
+                      placeholder="0"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="space-y-1 mb-4 text-sm text-gray-600">
+                    <div className="flex justify-between">
+                      <span>Subtotal</span>
+                      <span>₹{calculateSubtotal()}</span>
+                    </div>
+                    {getCartDiscountAmount() > 0 && (
+                      <div className="flex justify-between text-red-600">
+                        <span>Discount</span>
+                        <span>-₹{getCartDiscountAmount()}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-lg font-semibold text-gray-800 pt-1">
+                      <span>Total</span>
+                      <span>₹{calculateTotal()}</span>
+                    </div>
                   </div>
                   <button
                     onClick={processSale}
