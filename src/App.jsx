@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, Scan, Plus, Minus, Trash2, BarChart3, RefreshCw, AlertCircle, Search } from 'lucide-react';
+import { Package, ShoppingCart, Scan, Plus, Minus, Trash2, BarChart3, RefreshCw, AlertCircle, Search, Wallet, RotateCcw } from 'lucide-react';
 import { API_BASE } from './config';
 import { getAuthToken, clearAuthToken } from './lib/auth';
 const GarmentsPOSSystem = () => {
@@ -15,6 +15,11 @@ const GarmentsPOSSystem = () => {
   const [error, setError] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [cartDiscount, setCartDiscount] = useState('');
+  const [openCredits, setOpenCredits] = useState([]);
+  const [selectedOpenCreditId, setSelectedOpenCreditId] = useState('');
+  const [returnSale, setReturnSale] = useState(null);
+  const [returnQuantities, setReturnQuantities] = useState({});
+  const [returnNote, setReturnNote] = useState('');
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,14 +60,17 @@ const GarmentsPOSSystem = () => {
         throw new Error('Session expired');
       }
 
+      const data = await response.json().catch(() => null);
+
       if (!response.ok) {
-        throw new Error(`API Error: ${response.status}`);
+        const message = data?.error || `API Error: ${response.status}`;
+        throw new Error(message);
       }
 
-      return await response.json();
+      return data;
     } catch (err) {
       console.error('API call failed:', err);
-      setError(`API Error: ${err.message}`);
+      setError(err.message || 'API request failed');
       throw err;
     }
   };
@@ -71,6 +79,7 @@ const GarmentsPOSSystem = () => {
   useEffect(() => {
     loadInventory();
     loadSalesHistory();
+    loadOpenCredits();
     loadAnalytics();
     loadCategories();
     loadBrands();
@@ -113,6 +122,15 @@ const GarmentsPOSSystem = () => {
       setBills(sales);
     } catch (err) {
       console.error('Failed to load sales history:', err);
+    }
+  };
+
+  const loadOpenCredits = async () => {
+    try {
+      const credits = await apiCall('/open-credits?status=open');
+      setOpenCredits(credits);
+    } catch (err) {
+      console.error('Failed to load open credits:', err);
     }
   };
 
@@ -222,10 +240,90 @@ const GarmentsPOSSystem = () => {
     return Math.max(0, discount);
   };
 
+  const getSelectedCreditAmount = () => {
+    if (!selectedOpenCreditId) return 0;
+    const credit = openCredits.find(c => String(c.id) === String(selectedOpenCreditId));
+    return credit ? credit.amount : 0;
+  };
+
   const calculateTotal = () => {
     const subtotal = calculateSubtotal();
     const discount = getCartDiscountAmount();
-    return Math.max(0, subtotal - discount);
+    const credit = getSelectedCreditAmount();
+    return Math.max(0, Math.round((subtotal - discount - credit) * 100) / 100);
+  };
+
+  const openReturnModal = (bill) => {
+    const quantities = {};
+    bill.items.forEach(item => {
+      const remaining = item.quantity - (item.returnedQuantity || 0);
+      if (remaining > 0) {
+        quantities[item.id] = 0;
+      }
+    });
+    if (Object.keys(quantities).length === 0) {
+      setError('All items on this bill have already been returned');
+      return;
+    }
+    setReturnSale(bill);
+    setReturnQuantities(quantities);
+    setReturnNote('');
+    setError('');
+  };
+
+  const closeReturnModal = () => {
+    setReturnSale(null);
+    setReturnQuantities({});
+    setReturnNote('');
+  };
+
+  const processReturn = async () => {
+    if (!returnSale) return;
+
+    const items = Object.entries(returnQuantities)
+      .filter(([, qty]) => Number(qty) > 0)
+      .map(([productId, qty]) => ({ productId: Number(productId), quantity: Number(qty) }));
+
+    if (items.length === 0) {
+      setError('Select at least one item to return');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await apiCall(`/sales/${returnSale.id}/returns`, {
+        method: 'POST',
+        body: JSON.stringify({ items, note: returnNote.trim() || null }),
+      });
+      await loadInventory();
+      await loadSalesHistory();
+      await loadOpenCredits();
+      closeReturnModal();
+      setError('');
+      alert(`Return recorded. Store credit ₹${result.creditAmount} added.`);
+    } catch (err) {
+      // error already set by apiCall
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const markCreditUsed = async (creditId) => {
+    if (!window.confirm('Mark this credit as used?')) return;
+
+    setLoading(true);
+    try {
+      await apiCall(`/open-credits/${creditId}/mark-used`, { method: 'PATCH' });
+      if (String(selectedOpenCreditId) === String(creditId)) {
+        setSelectedOpenCreditId('');
+      }
+      await loadOpenCredits();
+      setError('');
+    } catch (err) {
+      // error already set by apiCall
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Process sale and update database
@@ -241,7 +339,8 @@ const GarmentsPOSSystem = () => {
         items: cart,
         total: calculateTotal(),
         cartDiscount: getCartDiscountAmount(),
-        customerName: customerName.trim() || null
+        customerName: customerName.trim() || null,
+        openCreditId: selectedOpenCreditId ? Number(selectedOpenCreditId) : undefined
       };
 
       await apiCall('/sales', {
@@ -252,12 +351,14 @@ const GarmentsPOSSystem = () => {
       // Refresh data
       await loadInventory();
       await loadSalesHistory();
+      await loadOpenCredits();
       await loadAnalytics();
 
       // Clear cart and customer name
       setCart([]);
       setCustomerName('');
       setCartDiscount('');
+      setSelectedOpenCreditId('');
       setError('');
       alert('Sale completed successfully!');
     } catch (err) {
@@ -273,6 +374,7 @@ const GarmentsPOSSystem = () => {
     await Promise.all([
       loadInventory(),
       loadSalesHistory(),
+      loadOpenCredits(),
       loadAnalytics(),
       loadCategories(),
       loadBrands()
@@ -646,6 +748,38 @@ const filteredInventory = inventory.filter(item => {
 
       {/* Billing Tab */}
       {activeTab === 'billing' && (
+        <div>
+          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Wallet className="text-amber-700" size={20} />
+              <h2 className="text-lg font-semibold text-amber-900">Open Store Credits</h2>
+            </div>
+            {openCredits.length === 0 ? (
+              <p className="text-sm text-amber-800">No open credits — nothing to remember.</p>
+            ) : (
+              <div className="space-y-2">
+                {openCredits.map(credit => (
+                  <div key={credit.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-white rounded-lg p-3 border border-amber-100">
+                    <div className="text-sm text-gray-800">
+                      <span className="font-semibold text-amber-900">₹{credit.amount}</span>
+                      <span className="text-gray-600"> — Bill #{credit.saleId}</span>
+                      {credit.customerName && <span className="text-blue-600"> ({credit.customerName})</span>}
+                      {credit.note && <span className="block text-gray-500">{credit.note}</span>}
+                      <span className="block text-xs text-gray-400">{new Date(credit.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <button
+                      onClick={() => markCreditUsed(credit.id)}
+                      disabled={loading}
+                      className="text-sm px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
+                    >
+                      Mark used
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Barcode Scanner */}
           <div className="bg-white rounded-lg shadow-md p-6">
@@ -734,6 +868,25 @@ const filteredInventory = inventory.filter(item => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
+                  {openCredits.length > 0 && (
+                    <div className="mb-3">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Apply store credit
+                      </label>
+                      <select
+                        value={selectedOpenCreditId}
+                        onChange={(e) => setSelectedOpenCreditId(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">None</option>
+                        {openCredits.map(credit => (
+                          <option key={credit.id} value={credit.id}>
+                            ₹{credit.amount} — Bill #{credit.saleId}{credit.customerName ? ` (${credit.customerName})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div className="space-y-1 mb-4 text-sm text-gray-600">
                     <div className="flex justify-between">
                       <span>Subtotal</span>
@@ -743,6 +896,12 @@ const filteredInventory = inventory.filter(item => {
                       <div className="flex justify-between text-red-600">
                         <span>Discount</span>
                         <span>-₹{getCartDiscountAmount()}</span>
+                      </div>
+                    )}
+                    {getSelectedCreditAmount() > 0 && (
+                      <div className="flex justify-between text-amber-700">
+                        <span>Store credit</span>
+                        <span>-₹{getSelectedCreditAmount()}</span>
                       </div>
                     )}
                     <div className="flex justify-between text-lg font-semibold text-gray-800 pt-1">
@@ -761,6 +920,7 @@ const filteredInventory = inventory.filter(item => {
               </div>
             )}
           </div>
+        </div>
         </div>
       )}
 
@@ -1117,16 +1277,30 @@ Formal Shirt, L, White, 899, 8, 8901234567892, Shirts, FormalFit"
                   <div className="space-y-2">
                     {bill.items.map((item, index) => (
                       <div key={index} className="flex justify-between text-sm">
-                        <span>{item.name} x {item.quantity}</span>
+                        <span>
+                          {item.name} x {item.quantity}
+                          {(item.returnedQuantity || 0) > 0 && (
+                            <span className="text-amber-600 ml-1">({item.returnedQuantity} returned)</span>
+                          )}
+                        </span>
                         <span>₹{item.totalPrice || (item.price * item.quantity)}</span>
                       </div>
                     ))}
                   </div>
-                  <div className="border-t pt-2 mt-2">
-                    <div className="flex justify-between font-semibold">
-                      <span>Total:</span>
+                  <div className="border-t pt-2 mt-2 flex justify-between items-center">
+                    <div className="font-semibold">
+                      <span>Total: </span>
                       <span>₹{bill.total}</span>
                     </div>
+                    {bill.items.some(item => item.quantity > (item.returnedQuantity || 0)) && (
+                      <button
+                        onClick={() => openReturnModal(bill)}
+                        className="flex items-center gap-1 text-sm px-3 py-1 bg-amber-100 text-amber-800 rounded hover:bg-amber-200"
+                      >
+                        <RotateCcw size={14} />
+                        Record return
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1218,6 +1392,69 @@ Formal Shirt, L, White, 899, 8, 8901234567892, Shirts, FormalFit"
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {returnSale && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-xl font-semibold mb-2">Record Return</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Bill #{returnSale.id}
+              {returnSale.customerName && ` — ${returnSale.customerName}`}
+            </p>
+            <div className="space-y-3 mb-4">
+              {returnSale.items
+                .filter(item => item.quantity > (item.returnedQuantity || 0))
+                .map(item => {
+                  const maxReturn = item.quantity - (item.returnedQuantity || 0);
+                  return (
+                    <div key={item.id} className="flex items-center justify-between gap-3">
+                      <div className="text-sm flex-1">
+                        <span className="font-medium">{item.name}</span>
+                        <span className="text-gray-500 block">₹{item.price} each — max {maxReturn}</span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        max={maxReturn}
+                        value={returnQuantities[item.id] ?? 0}
+                        onChange={(e) => {
+                          const val = Math.min(maxReturn, Math.max(0, Number(e.target.value) || 0));
+                          setReturnQuantities({ ...returnQuantities, [item.id]: val });
+                        }}
+                        className="w-20 px-2 py-1 border border-gray-300 rounded-lg text-center"
+                      />
+                    </div>
+                  );
+                })}
+            </div>
+            <input
+              type="text"
+              value={returnNote}
+              onChange={(e) => setReturnNote(e.target.value)}
+              placeholder="Note (optional, e.g. returned 1 capri set)"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4"
+            />
+            <p className="text-xs text-amber-700 mb-4">
+              Stock will be restored. A store credit will be added to Open Store Credits — no cash refund.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={processReturn}
+                disabled={loading}
+                className="flex-1 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50"
+              >
+                {loading ? 'Saving...' : 'Confirm return'}
+              </button>
+              <button
+                onClick={closeReturnModal}
+                className="flex-1 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
