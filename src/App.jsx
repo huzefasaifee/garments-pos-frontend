@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, Scan, Plus, Minus, Trash2, BarChart3, RefreshCw, AlertCircle, Search, Wallet, RotateCcw } from 'lucide-react';
+import { Package, ShoppingCart, Scan, Plus, Minus, Trash2, BarChart3, RefreshCw, AlertCircle, Search, Wallet, RotateCcw, Printer } from 'lucide-react';
 import { API_BASE } from './config';
 import { getAuthToken, clearAuthToken } from './lib/auth';
+import BarcodeLabel from './components/BarcodeLabel';
+import LabelPrintSheet from './components/LabelPrintSheet';
+import './label-print.css';
 const GarmentsPOSSystem = () => {
   const navigate = useNavigate();
   const [inventory, setInventory] = useState([]);
@@ -23,6 +26,9 @@ const GarmentsPOSSystem = () => {
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [labelSearchTerm, setLabelSearchTerm] = useState('');
+  const [selectedForPrint, setSelectedForPrint] = useState({});
+  const [labelsToPrint, setLabelsToPrint] = useState([]);
 
   // Stock management states
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -141,34 +147,6 @@ const GarmentsPOSSystem = () => {
     } catch (err) {
       console.error('Failed to load analytics:', err);
     }
-  };
-
-  // Generate SVG barcode (simplified Code 128-style representation)
-  const generateBarcodeSVG = (code) => {
-    const bars = code.split('').map((digit, index) => {
-      const width = (parseInt(digit) % 3) + 1;
-      const isBlack = index % 2 === 0;
-      return { width, isBlack, x: index * 8 };
-    });
-
-    return (
-      <svg width="200" height="50" className="border">
-        <rect width="200" height="50" fill="white" />
-        {bars.map((bar, index) => (
-          <rect
-            key={index}
-            x={bar.x}
-            y="5"
-            width={bar.width * 2}
-            height="30"
-            fill={bar.isBlack ? "black" : "white"}
-          />
-        ))}
-        <text x="100" y="45" textAnchor="middle" fontSize="8" fill="black">
-          {code}
-        </text>
-      </svg>
-    );
   };
 
   // Add item to cart by barcode
@@ -567,6 +545,74 @@ const filteredInventory = inventory.filter(item => {
   return matchesSearch;
 });
 
+  const filteredLabelInventory = inventory.filter(item => {
+    const term = labelSearchTerm.toLowerCase();
+    return labelSearchTerm === '' ||
+      item.name.toLowerCase().includes(term) ||
+      item.size.toLowerCase().includes(term) ||
+      item.barcode.includes(labelSearchTerm);
+  });
+
+  const toggleProductForPrint = (productId) => {
+    setSelectedForPrint(prev => {
+      if (prev[productId]) {
+        const next = { ...prev };
+        delete next[productId];
+        return next;
+      }
+      return { ...prev, [productId]: 1 };
+    });
+  };
+
+  const updatePrintCopies = (productId, copies) => {
+    const count = Math.max(1, parseInt(copies, 10) || 1);
+    setSelectedForPrint(prev => ({ ...prev, [productId]: count }));
+  };
+
+  const selectAllVisibleForPrint = () => {
+    const allSelected = filteredLabelInventory.every(item => selectedForPrint[item.id]);
+    if (allSelected) {
+      setSelectedForPrint(prev => {
+        const next = { ...prev };
+        filteredLabelInventory.forEach(item => delete next[item.id]);
+        return next;
+      });
+    } else {
+      setSelectedForPrint(prev => {
+        const next = { ...prev };
+        filteredLabelInventory.forEach(item => {
+          if (!next[item.id]) next[item.id] = 1;
+        });
+        return next;
+      });
+    }
+  };
+
+  const buildPrintLabels = () => {
+    const labels = [];
+    inventory.forEach(item => {
+      const copies = selectedForPrint[item.id];
+      if (copies && copies > 0) {
+        for (let i = 0; i < copies; i++) {
+          labels.push(item);
+        }
+      }
+    });
+    return labels;
+  };
+
+  const handlePrintLabels = () => {
+    const labels = buildPrintLabels();
+    if (labels.length === 0) return;
+    setLabelsToPrint(labels);
+    requestAnimationFrame(() => {
+      setTimeout(() => window.print(), 100);
+    });
+  };
+
+  const selectedLabelCount = Object.values(selectedForPrint).reduce((sum, n) => sum + n, 0);
+  const previewLabels = buildPrintLabels();
+
   return (
   <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 bg-gray-50 min-h-screen">
       <div className="flex justify-between items-center mb-8">
@@ -719,6 +765,14 @@ const filteredInventory = inventory.filter(item => {
         >
           <Package className="inline mr-2" size={20} />
           Stock Management
+        </button>
+        <button
+          onClick={() => setActiveTab('labels')}
+          className={`flex-1 py-3 px-6 text-center font-medium transition-colors ${activeTab === 'labels' ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-100'
+            }`}
+        >
+          <Printer className="inline mr-2" size={20} />
+          Labels
         </button>
         <button
           onClick={() => setActiveTab('inventory')}
@@ -1234,24 +1288,107 @@ Formal Shirt, L, White, 899, 8, 8901234567892, Shirts, FormalFit"
   </div>
       )}
 
-      {/* Barcodes Tab */}
-      {activeTab === 'barcodes' && (
+      {/* Labels Tab */}
+      {activeTab === 'labels' && (
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-semibold mb-6 text-gray-800">Product Barcodes</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {inventory.map(item => (
-              <div key={item.id} className="border rounded-lg p-4 text-center">
-                <h3 className="font-medium text-gray-800 mb-1">{item.name}</h3>
-                <p className="text-sm text-gray-600 mb-2">Size: {item.size} | {item.color}</p>
-                <div className="mb-2">
-                  {generateBarcodeSVG(item.barcode)}
-                </div>
-                <p className="text-sm text-gray-600">Price: ₹{item.price}</p>
-                <p className="text-sm text-gray-600">Stock: {item.stock}</p>
-                {item.brand && <p className="text-xs text-gray-500 mt-1">{item.brand}</p>}
-              </div>
-            ))}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <h2 className="text-2xl font-semibold text-gray-800">Print Barcode Labels</h2>
+            <button
+              onClick={handlePrintLabels}
+              disabled={selectedLabelCount === 0}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Printer size={18} />
+              Print {selectedLabelCount > 0 ? `${selectedLabelCount} label${selectedLabelCount !== 1 ? 's' : ''}` : 'selected'}
+            </button>
           </div>
+
+          <p className="text-sm text-gray-600 mb-4">
+            Select products and set copies, then print on Avery L7159 sheets (48 labels per A4).
+            Use scale 100%, margins None.
+          </p>
+
+          <div className="mb-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <input
+                type="text"
+                placeholder="Search by name, size, or barcode..."
+                value={labelSearchTerm}
+                onChange={(e) => setLabelSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          <div className="mb-6 overflow-x-auto">
+            <table className="w-full table-auto">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="px-4 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={filteredLabelInventory.length > 0 && filteredLabelInventory.every(item => selectedForPrint[item.id])}
+                      onChange={selectAllVisibleForPrint}
+                      className="rounded"
+                    />
+                  </th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Item</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Size</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Price</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Barcode</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Copies</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLabelInventory.map(item => (
+                  <tr key={item.id} className="border-b hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={!!selectedForPrint[item.id]}
+                        onChange={() => toggleProductForPrint(item.id)}
+                        className="rounded"
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-gray-800">{item.name}</td>
+                    <td className="px-4 py-3 text-gray-600">{item.size}</td>
+                    <td className="px-4 py-3 text-gray-800">₹{item.price}</td>
+                    <td className="px-4 py-3 font-mono text-sm text-gray-700">{item.barcode}</td>
+                    <td className="px-4 py-3">
+                      <input
+                        type="number"
+                        min="1"
+                        value={selectedForPrint[item.id] || 1}
+                        disabled={!selectedForPrint[item.id]}
+                        onChange={(e) => updatePrintCopies(item.id, e.target.value)}
+                        className="w-16 px-2 py-1 border border-gray-300 rounded disabled:bg-gray-100 disabled:opacity-50"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {filteredLabelInventory.length === 0 && (
+              <p className="text-center text-gray-500 py-8">No products found</p>
+            )}
+          </div>
+
+          {previewLabels.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-3">Preview</h3>
+              <div className="flex flex-wrap gap-3">
+                {previewLabels.slice(0, 12).map((item, index) => (
+                  <BarcodeLabel key={`preview-${item.id}-${index}`} product={item} />
+                ))}
+                {previewLabels.length > 12 && (
+                  <div className="flex items-center justify-center w-[180px] h-[84px] border border-dashed border-gray-300 rounded text-sm text-gray-500">
+                    +{previewLabels.length - 12} more
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1455,6 +1592,12 @@ Formal Shirt, L, White, 899, 8, 8901234567892, Shirts, FormalFit"
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {labelsToPrint.length > 0 && (
+        <div className="label-print-container">
+          <LabelPrintSheet labels={labelsToPrint} />
         </div>
       )}
     </div>
