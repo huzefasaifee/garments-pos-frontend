@@ -29,6 +29,10 @@ const GarmentsPOSSystem = () => {
   const [labelSearchTerm, setLabelSearchTerm] = useState('');
   const [selectedForPrint, setSelectedForPrint] = useState({});
   const [labelsToPrint, setLabelsToPrint] = useState([]);
+  const [catalogueSearch, setCatalogueSearch] = useState('');
+  const [catalogueCategory, setCatalogueCategory] = useState('All categories');
+  const [catalogueSize, setCatalogueSize] = useState('All sizes');
+  const [cataloguePrice, setCataloguePrice] = useState('all');
 
   // Stock management states
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -545,6 +549,44 @@ const filteredInventory = inventory.filter(item => {
   return matchesSearch;
 });
 
+const catalogueItems = inventory.filter(item => {
+  const term = catalogueSearch.trim().toLowerCase();
+  const searchable = `${item.name || ''} ${item.category || ''} ${item.brand || ''} ${item.color || ''}`.toLowerCase();
+  const searchMatch = !term || searchable.includes(term);
+  const categoryMatch = catalogueCategory === 'All categories' || item.category === catalogueCategory;
+  const sizeMatch = catalogueSize === 'All sizes' || String(item.size) === catalogueSize;
+  const price = Number(item.price) || 0;
+  const priceMatch = cataloguePrice === 'all'
+    || (cataloguePrice === 'under-500' && price < 500)
+    || (cataloguePrice === '500-999' && price >= 500 && price <= 999)
+    || (cataloguePrice === '1000-plus' && price >= 1000);
+  return searchMatch && categoryMatch && sizeMatch && priceMatch;
+});
+
+const addCatalogueItem = (item) => {
+  if (Number(item.stock) <= 0) {
+    setError('This item is out of stock.');
+    return;
+  }
+  setCart(currentCart => {
+    const existing = currentCart.find(cartItem => cartItem.id === item.id);
+    if (!existing) return [...currentCart, { ...item, quantity: 1 }];
+    if (existing.quantity >= item.stock) {
+      setError('Insufficient stock for this item.');
+      return currentCart;
+    }
+    return currentCart.map(cartItem => cartItem.id === item.id
+      ? { ...cartItem, quantity: cartItem.quantity + 1 }
+      : cartItem);
+  });
+};
+
+const clearCatalogueFilters = () => {
+  setCatalogueCategory('All categories');
+  setCatalogueSize('All sizes');
+  setCataloguePrice('all');
+};
+
   const filteredLabelInventory = inventory.filter(item => {
     const term = labelSearchTerm.toLowerCase();
     return labelSearchTerm === '' ||
@@ -751,6 +793,13 @@ const filteredInventory = inventory.filter(item => {
       {/* Navigation Tabs */}
   <div className="flex flex-col sm:flex-row mb-6 bg-white rounded-lg shadow-sm">
         <button
+          onClick={() => setActiveTab('catalogue')}
+          className={`flex-1 py-3 px-6 text-center font-medium transition-colors ${activeTab === 'catalogue' ? 'bg-emerald-500 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+        >
+          <Search className="inline mr-2" size={20} />
+          Catalogue
+        </button>
+        <button
           onClick={() => setActiveTab('billing')}
           className={`flex-1 py-3 px-6 text-center font-medium rounded-l-lg transition-colors ${activeTab === 'billing' ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-100'
             }`}
@@ -799,6 +848,65 @@ const filteredInventory = inventory.filter(item => {
           Analytics
         </button>
       </div>
+
+      {/* Catalogue Tab */}
+      {activeTab === 'catalogue' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+              <div className="flex-1">
+                <label htmlFor="catalogue-search" className="block text-sm font-semibold text-gray-700 mb-2">Search catalogue</label>
+                <input id="catalogue-search" type="search" value={catalogueSearch} onChange={event => setCatalogueSearch(event.target.value)} placeholder="Search by name, brand, colour, or category" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+              </div>
+              <div>
+                <label htmlFor="catalogue-category" className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                <select id="catalogue-category" value={catalogueCategory} onChange={event => setCatalogueCategory(event.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg">
+                  <option>All categories</option>
+                  {categories.map(category => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="catalogue-size" className="block text-sm font-semibold text-gray-700 mb-2">Size</label>
+                <select id="catalogue-size" value={catalogueSize} onChange={event => setCatalogueSize(event.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg">
+                  <option>All sizes</option>
+                  {[...new Set(inventory.map(item => String(item.size)).filter(Boolean))].sort().map(size => <option key={size}>{size}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="catalogue-price" className="block text-sm font-semibold text-gray-700 mb-2">Price</label>
+                <select id="catalogue-price" value={cataloguePrice} onChange={event => setCataloguePrice(event.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg">
+                  <option value="all">All prices</option>
+                  <option value="under-500">Under 500</option>
+                  <option value="500-999">500 - 999</option>
+                  <option value="1000-plus">1000+</option>
+                </select>
+              </div>
+              <button type="button" onClick={clearCatalogueFilters} className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Clear filters</button>
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-semibold text-gray-800">Browse styles</h2>
+            <span className="text-sm text-gray-500">{catalogueItems.length} items</span>
+          </div>
+          {catalogueItems.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-md p-10 text-center text-gray-500">No products match these filters.</div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {catalogueItems.map(item => (
+                <article key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden">
+                  <div className="h-32 bg-emerald-50 flex items-center justify-center text-emerald-700 text-4xl font-bold">{(item.category || item.name || 'G').charAt(0).toUpperCase()}</div>
+                  <div className="p-5">
+                    <div className="flex justify-between gap-3 text-xs text-gray-500"><span>{item.category || 'General'}</span><span>{item.stock} in stock</span></div>
+                    <h3 className="mt-2 text-lg font-semibold text-gray-800">{item.name}</h3>
+                    <p className="mt-1 text-sm text-gray-500">{item.color || 'Standard colour'} | Size {item.size}</p>
+                    <div className="mt-4 flex items-center justify-between gap-3"><strong className="text-xl text-gray-900">{Number(item.price)}</strong><button type="button" onClick={() => addCatalogueItem(item)} disabled={Number(item.stock) <= 0} className="px-3 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50">Add to bill</button></div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Billing Tab */}
       {activeTab === 'billing' && (
