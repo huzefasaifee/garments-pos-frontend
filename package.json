@@ -9,6 +9,8 @@
     "@testing-library/user-event": "^13.5.0",
     "jsbarcode": "^3.12.3",
     "lucide-react": "^0.539.0",
+    "multer": "^2.3.0",
+    "qrcode": "^1.5.4",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.9.5",

@@ -5,6 +5,8 @@ import { API_BASE } from './config';
 import { getAuthToken, clearAuthToken } from './lib/auth';
 import BarcodeLabel from './components/BarcodeLabel';
 import LabelPrintSheet from './components/LabelPrintSheet';
+import { ProductImagePicker } from './components/ProductImagePicker';
+import { ProductImage } from './components/ProductImage';
 import './label-print.css';
 const GarmentsPOSSystem = () => {
   const navigate = useNavigate();
@@ -49,6 +51,9 @@ const GarmentsPOSSystem = () => {
   });
   const [bulkImportData, setBulkImportData] = useState('');
   const [editingProduct, setEditingProduct] = useState(null);
+  const [newProductImage, setNewProductImage] = useState(null);
+  const [editingProductImage, setEditingProductImage] = useState(null);
+  const [editingImageRemoved, setEditingImageRemoved] = useState(false);
 
 
 
@@ -83,6 +88,23 @@ const GarmentsPOSSystem = () => {
       setError(err.message || 'API request failed');
       throw err;
     }
+  };
+
+  const uploadProductImage = async (productId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE}/products/${productId}/image`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getAuthToken()}` },
+      body: formData,
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(result?.error || 'Image upload failed');
+    return result;
+  };
+
+  const removeProductImage = async (productId) => {
+    await apiCall(`/products/${productId}/image`, { method: 'DELETE' });
   };
 
   // Load initial data
@@ -393,10 +415,14 @@ const GarmentsPOSSystem = () => {
         stock: parseInt(newProduct.stock)
       };
 
-      await apiCall('/products', {
+      const createdProduct = await apiCall('/products', {
         method: 'POST',
         body: JSON.stringify(productData),
       });
+
+      if (newProductImage) {
+        await uploadProductImage(createdProduct.id, newProductImage);
+      }
 
       setNewProduct({
         name: '',
@@ -409,6 +435,7 @@ const GarmentsPOSSystem = () => {
         brand: ''
       });
       setShowAddProduct(false);
+      setNewProductImage(null);
       await refreshData();
       setError('');
       alert('Product added successfully!');
@@ -446,6 +473,8 @@ const GarmentsPOSSystem = () => {
   // Open edit modal for a product
   const openEditProduct = (product) => {
     setEditingProduct({ ...product });
+    setEditingProductImage(null);
+    setEditingImageRemoved(false);
   };
 
   // Save edited product to server
@@ -476,7 +505,15 @@ const GarmentsPOSSystem = () => {
         body: JSON.stringify(updated),
       });
 
+      if (editingProductImage) {
+        await uploadProductImage(editingProduct.id, editingProductImage);
+      } else if (editingImageRemoved && editingProduct.imageUrl) {
+        await removeProductImage(editingProduct.id);
+      }
+
       setEditingProduct(null);
+      setEditingProductImage(null);
+      setEditingImageRemoved(false);
       await loadInventory();
       setError('');
       alert('Product updated successfully!');
@@ -656,11 +693,21 @@ const clearCatalogueFilters = () => {
   const previewLabels = buildPrintLabels();
 
   return (
-  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 bg-gray-50 min-h-screen">
+  <div className="pos-app max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 bg-gray-50 min-h-screen">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">
-          Readymade Garments POS System
-        </h1>
+        <div className="flex items-center gap-3">
+          <img
+            src="/assets/branding/star-logo.jpg"
+            alt="Star Apparels logo"
+            className="h-12 w-12 rounded-2xl object-cover shadow-sm"
+          />
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-700">Star Apparels</p>
+            <h1 className="text-3xl font-bold text-gray-800">
+              Staff workspace
+            </h1>
+          </div>
+        </div>
         <div className="flex items-center gap-4">
           <button
             onClick={refreshData}
@@ -768,6 +815,19 @@ const clearCatalogueFilters = () => {
                     className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
+                <ProductImagePicker
+                  file={editingProductImage}
+                  existingUrl={editingProduct.imageUrl}
+                  removed={editingImageRemoved}
+                  onChange={(file) => {
+                    setEditingProductImage(file);
+                    setEditingImageRemoved(false);
+                  }}
+                  onRemove={() => {
+                    setEditingProductImage(null);
+                    setEditingImageRemoved(true);
+                  }}
+                />
               </div>
               <div className="flex flex-col sm:flex-row gap-3 mt-6">
                 <button
@@ -894,7 +954,11 @@ const clearCatalogueFilters = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {catalogueItems.map(item => (
                 <article key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-                  <div className="h-32 bg-emerald-50 flex items-center justify-center text-emerald-700 text-4xl font-bold">{(item.category || item.name || 'G').charAt(0).toUpperCase()}</div>
+                  <ProductImage
+                    src={item.imageUrl}
+                    alt={`${item.name} ${item.color || ''} size ${item.size}`}
+                    className="h-32 w-full"
+                  />
                   <div className="p-5">
                     <div className="flex justify-between gap-3 text-xs text-gray-500"><span>{item.category || 'General'}</span><span>{item.stock} in stock</span></div>
                     <h3 className="mt-2 text-lg font-semibold text-gray-800">{item.name}</h3>
@@ -1163,6 +1227,11 @@ const clearCatalogueFilters = () => {
                     ))}
                     <option value="Other">Other</option>
                   </select>
+                  <ProductImagePicker
+                    file={newProductImage}
+                    onChange={setNewProductImage}
+                    onRemove={() => setNewProductImage(null)}
+                  />
                   <div className="grid grid-cols-2 gap-4">
                     <input
                       type="text"
@@ -1259,12 +1328,19 @@ Formal Shirt, L, White, 899, 8, 8901234567892, Shirts, FormalFit"
                     {inventory.map(item => (
                       <tr key={item.id} className="border-b hover:bg-gray-50">
                         <td className="px-4 py-3">
-                          <div>
+                          <div className="flex items-center gap-3">
+                            <ProductImage
+                              src={item.imageUrl}
+                              alt={`${item.name} ${item.color || ''} size ${item.size}`}
+                              className="h-12 w-12 shrink-0 rounded-lg"
+                            />
+                            <div>
                             <div className="font-medium text-gray-800">
                               {item.name} ({item.size})
                             </div>
                             <div className="text-sm text-gray-500">
                               {item.color} | {item.category}
+                            </div>
                             </div>
                           </div>
                         </td>
