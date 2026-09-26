@@ -4,11 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!-- Security Headers -->
-    <meta http-equiv="Content-Security-Policy" 
+    <meta http-equiv="Content-Security-Policy"
       content="default-src 'self';
-       script-src 'self'  https://static.cloudflareinsights.com;
+       script-src 'self' https://static.cloudflareinsights.com;
        style-src 'self' 'unsafe-inline';
-      img-src 'self' data: https: http://localhost:3002;
+       img-src 'self' data: blob: https: http://localhost:3002;
        connect-src 'self' http://localhost:3002 https://posapi.nileit.co.in https://*.cloudflareinsights.com;
        font-src 'self' data:;
        form-action 'self';">
