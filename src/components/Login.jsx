@@ -26,9 +26,9 @@ export function Login() {
 
       const { token } = await response.json();
       
-      // Store the token and redirect to main app
+      // Store the token and redirect to the staff workspace.
       setAuthToken(token);
-      window.location.href = '/';
+      window.location.href = '/star-kidswear/';
       
     } catch (err) {
       setError(err.message);
@@ -46,6 +46,11 @@ export function Login() {
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Owner Access Only
+          </p>
+          <p className="mt-3 text-center text-sm text-gray-600">
+            <a className="font-medium text-orange-700 hover:text-orange-800" href="/star-kidswear/catalogue">
+              Browse the customer catalogue
+            </a>
           </p>
         </div>
         

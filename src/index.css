@@ -10,6 +10,80 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+.pos-app {
+  --brand-blue: #d4edf8;
+  --brand-surface: #ffffff;
+  --brand-navy: #172f68;
+  --brand-muted: #526789;
+  --brand-purple: #403092;
+  --brand-orange: #c66b08;
+  background: #e3f4fb;
+  color: var(--brand-navy);
+}
+
+.pos-app .bg-white {
+  background-color: var(--brand-surface);
+}
+
+.pos-app .bg-gray-50 {
+  background-color: #e3f4fb;
+}
+
+.pos-app .bg-gray-100,
+.pos-app .hover\:bg-gray-100:hover {
+  background-color: #edf8fc;
+}
+
+.pos-app .text-gray-800,
+.pos-app .text-gray-700 {
+  color: var(--brand-navy);
+}
+
+.pos-app .text-gray-600,
+.pos-app .text-gray-500 {
+  color: var(--brand-muted);
+}
+
+.pos-app .border-gray-300,
+.pos-app .border-b {
+  border-color: #b7d9ea;
+}
+
+.pos-app .bg-blue-500,
+.pos-app .bg-emerald-500,
+.pos-app .bg-green-500 {
+  background-color: var(--brand-purple);
+}
+
+.pos-app .hover\:bg-blue-600:hover,
+.pos-app .hover\:bg-emerald-600:hover,
+.pos-app .hover\:bg-green-600:hover {
+  background-color: #30236f;
+}
+
+.pos-app .bg-yellow-500 {
+  background-color: var(--brand-orange);
+}
+
+.pos-app .hover\:bg-yellow-600:hover {
+  background-color: #a95605;
+}
+
+.pos-app .bg-gray-500 {
+  background-color: var(--brand-navy);
+}
+
+.pos-app .hover\:bg-gray-600:hover {
+  background-color: #0e214e;
+}
+
+.pos-app input:focus,
+.pos-app select:focus,
+.pos-app textarea:focus {
+  border-color: var(--brand-purple);
+  --tw-ring-color: #d9d2f5;
+}
+
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;

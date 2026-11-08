@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, Scan, Plus, Minus, Trash2, BarChart3, RefreshCw, AlertCircle, Search, Wallet, RotateCcw, Printer } from 'lucide-react';
+import { Package, ShoppingCart, Scan, Plus, Minus, Trash2, BarChart3, RefreshCw, AlertCircle, Search, Wallet, RotateCcw, Printer, ChevronDown } from 'lucide-react';
 import { API_BASE } from './config';
 import { getAuthToken, clearAuthToken } from './lib/auth';
 import BarcodeLabel from './components/BarcodeLabel';
 import LabelPrintSheet from './components/LabelPrintSheet';
+import { ProductImagePicker } from './components/ProductImagePicker';
+import { ProductImage } from './components/ProductImage';
 import './label-print.css';
 const GarmentsPOSSystem = () => {
   const navigate = useNavigate();
@@ -19,9 +21,11 @@ const GarmentsPOSSystem = () => {
   const [customerName, setCustomerName] = useState('');
   const [cartDiscount, setCartDiscount] = useState('');
   const [openCredits, setOpenCredits] = useState([]);
+  const [showOpenCredits, setShowOpenCredits] = useState(false);
   const [selectedOpenCreditId, setSelectedOpenCreditId] = useState('');
   const [returnSale, setReturnSale] = useState(null);
   const [returnQuantities, setReturnQuantities] = useState({});
+  const [returnCreditAmount, setReturnCreditAmount] = useState(null);
   const [returnNote, setReturnNote] = useState('');
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
@@ -29,6 +33,10 @@ const GarmentsPOSSystem = () => {
   const [labelSearchTerm, setLabelSearchTerm] = useState('');
   const [selectedForPrint, setSelectedForPrint] = useState({});
   const [labelsToPrint, setLabelsToPrint] = useState([]);
+  const [catalogueSearch, setCatalogueSearch] = useState('');
+  const [catalogueCategory, setCatalogueCategory] = useState('All categories');
+  const [catalogueSize, setCatalogueSize] = useState('All sizes');
+  const [cataloguePrice, setCataloguePrice] = useState('all');
 
   // Stock management states
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -45,6 +53,9 @@ const GarmentsPOSSystem = () => {
   });
   const [bulkImportData, setBulkImportData] = useState('');
   const [editingProduct, setEditingProduct] = useState(null);
+  const [newProductImage, setNewProductImage] = useState(null);
+  const [editingProductImage, setEditingProductImage] = useState(null);
+  const [editingImageRemoved, setEditingImageRemoved] = useState(false);
 
 
 
@@ -79,6 +90,23 @@ const GarmentsPOSSystem = () => {
       setError(err.message || 'API request failed');
       throw err;
     }
+  };
+
+  const uploadProductImage = async (productId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE}/products/${productId}/image`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getAuthToken()}` },
+      body: formData,
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(result?.error || 'Image upload failed');
+    return result;
+  };
+
+  const removeProductImage = async (productId) => {
+    await apiCall(`/products/${productId}/image`, { method: 'DELETE' });
   };
 
   // Load initial data
@@ -231,6 +259,15 @@ const GarmentsPOSSystem = () => {
     return Math.max(0, Math.round((subtotal - discount - credit) * 100) / 100);
   };
 
+  const calculateReturnCreditAmount = () => {
+    if (!returnSale) return 0;
+    const amount = returnSale.items.reduce(
+      (total, item) => total + Number(item.price) * Number(returnQuantities[item.id] || 0),
+      0
+    );
+    return Math.round(amount * 100) / 100;
+  };
+
   const openReturnModal = (bill) => {
     const quantities = {};
     bill.items.forEach(item => {
@@ -245,6 +282,7 @@ const GarmentsPOSSystem = () => {
     }
     setReturnSale(bill);
     setReturnQuantities(quantities);
+    setReturnCreditAmount(null);
     setReturnNote('');
     setError('');
   };
@@ -252,6 +290,7 @@ const GarmentsPOSSystem = () => {
   const closeReturnModal = () => {
     setReturnSale(null);
     setReturnQuantities({});
+    setReturnCreditAmount(null);
     setReturnNote('');
   };
 
@@ -267,11 +306,17 @@ const GarmentsPOSSystem = () => {
       return;
     }
 
+    const creditAmount = Number(returnCreditAmount ?? calculateReturnCreditAmount());
+    if (!Number.isFinite(creditAmount) || creditAmount <= 0) {
+      setError('Credit amount must be greater than zero');
+      return;
+    }
+
     setLoading(true);
     try {
       const result = await apiCall(`/sales/${returnSale.id}/returns`, {
         method: 'POST',
-        body: JSON.stringify({ items, note: returnNote.trim() || null }),
+        body: JSON.stringify({ items, note: returnNote.trim() || null, creditAmount }),
       });
       await loadInventory();
       await loadSalesHistory();
@@ -389,10 +434,14 @@ const GarmentsPOSSystem = () => {
         stock: parseInt(newProduct.stock)
       };
 
-      await apiCall('/products', {
+      const createdProduct = await apiCall('/products', {
         method: 'POST',
         body: JSON.stringify(productData),
       });
+
+      if (newProductImage) {
+        await uploadProductImage(createdProduct.id, newProductImage);
+      }
 
       setNewProduct({
         name: '',
@@ -405,6 +454,7 @@ const GarmentsPOSSystem = () => {
         brand: ''
       });
       setShowAddProduct(false);
+      setNewProductImage(null);
       await refreshData();
       setError('');
       alert('Product added successfully!');
@@ -442,6 +492,8 @@ const GarmentsPOSSystem = () => {
   // Open edit modal for a product
   const openEditProduct = (product) => {
     setEditingProduct({ ...product });
+    setEditingProductImage(null);
+    setEditingImageRemoved(false);
   };
 
   // Save edited product to server
@@ -472,7 +524,15 @@ const GarmentsPOSSystem = () => {
         body: JSON.stringify(updated),
       });
 
+      if (editingProductImage) {
+        await uploadProductImage(editingProduct.id, editingProductImage);
+      } else if (editingImageRemoved && editingProduct.imageUrl) {
+        await removeProductImage(editingProduct.id);
+      }
+
       setEditingProduct(null);
+      setEditingProductImage(null);
+      setEditingImageRemoved(false);
       await loadInventory();
       setError('');
       alert('Product updated successfully!');
@@ -545,6 +605,44 @@ const filteredInventory = inventory.filter(item => {
   return matchesSearch;
 });
 
+const catalogueItems = inventory.filter(item => {
+  const term = catalogueSearch.trim().toLowerCase();
+  const searchable = `${item.name || ''} ${item.category || ''} ${item.brand || ''} ${item.color || ''}`.toLowerCase();
+  const searchMatch = !term || searchable.includes(term);
+  const categoryMatch = catalogueCategory === 'All categories' || item.category === catalogueCategory;
+  const sizeMatch = catalogueSize === 'All sizes' || String(item.size) === catalogueSize;
+  const price = Number(item.price) || 0;
+  const priceMatch = cataloguePrice === 'all'
+    || (cataloguePrice === 'under-500' && price < 500)
+    || (cataloguePrice === '500-999' && price >= 500 && price <= 999)
+    || (cataloguePrice === '1000-plus' && price >= 1000);
+  return searchMatch && categoryMatch && sizeMatch && priceMatch;
+});
+
+const addCatalogueItem = (item) => {
+  if (Number(item.stock) <= 0) {
+    setError('This item is out of stock.');
+    return;
+  }
+  setCart(currentCart => {
+    const existing = currentCart.find(cartItem => cartItem.id === item.id);
+    if (!existing) return [...currentCart, { ...item, quantity: 1 }];
+    if (existing.quantity >= item.stock) {
+      setError('Insufficient stock for this item.');
+      return currentCart;
+    }
+    return currentCart.map(cartItem => cartItem.id === item.id
+      ? { ...cartItem, quantity: cartItem.quantity + 1 }
+      : cartItem);
+  });
+};
+
+const clearCatalogueFilters = () => {
+  setCatalogueCategory('All categories');
+  setCatalogueSize('All sizes');
+  setCataloguePrice('all');
+};
+
   const filteredLabelInventory = inventory.filter(item => {
     const term = labelSearchTerm.toLowerCase();
     return labelSearchTerm === '' ||
@@ -614,11 +712,21 @@ const filteredInventory = inventory.filter(item => {
   const previewLabels = buildPrintLabels();
 
   return (
-  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 bg-gray-50 min-h-screen">
+  <div className="pos-app max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 bg-gray-50 min-h-screen">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">
-          Readymade Garments POS System
-        </h1>
+        <div className="flex items-center gap-3">
+          <img
+            src="/assets/branding/star-logo.jpg"
+            alt="Star Apparels logo"
+            className="h-12 w-12 rounded-2xl object-cover shadow-sm"
+          />
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-700">Star Apparels</p>
+            <h1 className="text-3xl font-bold text-gray-800">
+              Staff workspace
+            </h1>
+          </div>
+        </div>
         <div className="flex items-center gap-4">
           <button
             onClick={refreshData}
@@ -726,6 +834,19 @@ const filteredInventory = inventory.filter(item => {
                     className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
+                <ProductImagePicker
+                  file={editingProductImage}
+                  existingUrl={editingProduct.imageUrl}
+                  removed={editingImageRemoved}
+                  onChange={(file) => {
+                    setEditingProductImage(file);
+                    setEditingImageRemoved(false);
+                  }}
+                  onRemove={() => {
+                    setEditingProductImage(null);
+                    setEditingImageRemoved(true);
+                  }}
+                />
               </div>
               <div className="flex flex-col sm:flex-row gap-3 mt-6">
                 <button
@@ -750,6 +871,13 @@ const filteredInventory = inventory.filter(item => {
 
       {/* Navigation Tabs */}
   <div className="flex flex-col sm:flex-row mb-6 bg-white rounded-lg shadow-sm">
+        <button
+          onClick={() => setActiveTab('catalogue')}
+          className={`flex-1 py-3 px-6 text-center font-medium transition-colors ${activeTab === 'catalogue' ? 'bg-emerald-500 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+        >
+          <Search className="inline mr-2" size={20} />
+          Catalogue
+        </button>
         <button
           onClick={() => setActiveTab('billing')}
           className={`flex-1 py-3 px-6 text-center font-medium rounded-l-lg transition-colors ${activeTab === 'billing' ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-100'
@@ -800,39 +928,111 @@ const filteredInventory = inventory.filter(item => {
         </button>
       </div>
 
+      {/* Catalogue Tab */}
+      {activeTab === 'catalogue' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+              <div className="flex-1">
+                <label htmlFor="catalogue-search" className="block text-sm font-semibold text-gray-700 mb-2">Search catalogue</label>
+                <input id="catalogue-search" type="search" value={catalogueSearch} onChange={event => setCatalogueSearch(event.target.value)} placeholder="Search by name, brand, colour, or category" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+              </div>
+              <div>
+                <label htmlFor="catalogue-category" className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                <select id="catalogue-category" value={catalogueCategory} onChange={event => setCatalogueCategory(event.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg">
+                  <option>All categories</option>
+                  {categories.map(category => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="catalogue-size" className="block text-sm font-semibold text-gray-700 mb-2">Size</label>
+                <select id="catalogue-size" value={catalogueSize} onChange={event => setCatalogueSize(event.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg">
+                  <option>All sizes</option>
+                  {[...new Set(inventory.map(item => String(item.size)).filter(Boolean))].sort().map(size => <option key={size}>{size}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="catalogue-price" className="block text-sm font-semibold text-gray-700 mb-2">Price</label>
+                <select id="catalogue-price" value={cataloguePrice} onChange={event => setCataloguePrice(event.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg">
+                  <option value="all">All prices</option>
+                  <option value="under-500">Under 500</option>
+                  <option value="500-999">500 - 999</option>
+                  <option value="1000-plus">1000+</option>
+                </select>
+              </div>
+              <button type="button" onClick={clearCatalogueFilters} className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Clear filters</button>
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-semibold text-gray-800">Browse styles</h2>
+            <span className="text-sm text-gray-500">{catalogueItems.length} items</span>
+          </div>
+          {catalogueItems.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-md p-10 text-center text-gray-500">No products match these filters.</div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {catalogueItems.map(item => (
+                <article key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden">
+                  <ProductImage
+                    src={item.imageUrl}
+                    alt={`${item.name} ${item.color || ''} size ${item.size}`}
+                    className="h-32 w-full"
+                  />
+                  <div className="p-5">
+                    <div className="flex justify-between gap-3 text-xs text-gray-500"><span>{item.category || 'General'}</span><span>{item.stock} in stock</span></div>
+                    <h3 className="mt-2 text-lg font-semibold text-gray-800">{item.name}</h3>
+                    <p className="mt-1 text-sm text-gray-500">{item.color || 'Standard colour'} | Size {item.size}</p>
+                    <div className="mt-4 flex items-center justify-between gap-3"><strong className="text-xl text-gray-900">{Number(item.price)}</strong><button type="button" onClick={() => addCatalogueItem(item)} disabled={Number(item.stock) <= 0} className="px-3 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50">Add to bill</button></div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Billing Tab */}
       {activeTab === 'billing' && (
         <div>
-          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Wallet className="text-amber-700" size={20} />
-              <h2 className="text-lg font-semibold text-amber-900">Open Store Credits</h2>
-            </div>
-            {openCredits.length === 0 ? (
-              <p className="text-sm text-amber-800">No open credits — nothing to remember.</p>
-            ) : (
-              <div className="space-y-2">
-                {openCredits.map(credit => (
-                  <div key={credit.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-white rounded-lg p-3 border border-amber-100">
-                    <div className="text-sm text-gray-800">
-                      <span className="font-semibold text-amber-900">₹{credit.amount}</span>
-                      <span className="text-gray-600"> — Bill #{credit.saleId}</span>
-                      {credit.customerName && <span className="text-blue-600"> ({credit.customerName})</span>}
-                      {credit.note && <span className="block text-gray-500">{credit.note}</span>}
-                      <span className="block text-xs text-gray-400">{new Date(credit.createdAt).toLocaleDateString()}</span>
+          {openCredits.length > 0 && (
+            <section className="mb-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <button
+                type="button"
+                aria-expanded={showOpenCredits}
+                aria-controls="open-store-credits-list"
+                onClick={() => setShowOpenCredits(!showOpenCredits)}
+                className="w-full flex items-center justify-between gap-3 p-3 text-left"
+              >
+                <span className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+                  <Wallet size={18} />
+                  Open Store Credits ({openCredits.length})
+                </span>
+                <ChevronDown size={18} className={`text-amber-800 transition-transform ${showOpenCredits ? 'rotate-180' : ''}`} />
+              </button>
+              {showOpenCredits && (
+                <div id="open-store-credits-list" className="space-y-2 px-3 pb-3">
+                  {openCredits.map(credit => (
+                    <div key={credit.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-white rounded-lg p-3 border border-amber-100">
+                      <div className="text-sm text-gray-800">
+                        <span className="font-semibold text-amber-900">₹{credit.amount}</span>
+                        <span className="text-gray-600"> — Bill #{credit.saleId}</span>
+                        {credit.customerName && <span className="text-blue-600"> ({credit.customerName})</span>}
+                        {credit.note && <span className="block text-gray-500">{credit.note}</span>}
+                        <span className="block text-xs text-gray-400">{new Date(credit.createdAt).toLocaleDateString()}</span>
+                      </div>
+                      <button
+                        onClick={() => markCreditUsed(credit.id)}
+                        disabled={loading}
+                        className="text-sm px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
+                      >
+                        Mark used
+                      </button>
                     </div>
-                    <button
-                      onClick={() => markCreditUsed(credit.id)}
-                      disabled={loading}
-                      className="text-sm px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
-                    >
-                      Mark used
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Barcode Scanner */}
@@ -942,6 +1142,10 @@ const filteredInventory = inventory.filter(item => {
                     </div>
                   )}
                   <div className="space-y-1 mb-4 text-sm text-gray-600">
+                    <div className="flex justify-between">
+                      <span>Total items</span>
+                      <span>{cart.reduce((total, item) => total + item.quantity, 0)}</span>
+                    </div>
                     <div className="flex justify-between">
                       <span>Subtotal</span>
                       <span>₹{calculateSubtotal()}</span>
@@ -1055,6 +1259,11 @@ const filteredInventory = inventory.filter(item => {
                     ))}
                     <option value="Other">Other</option>
                   </select>
+                  <ProductImagePicker
+                    file={newProductImage}
+                    onChange={setNewProductImage}
+                    onRemove={() => setNewProductImage(null)}
+                  />
                   <div className="grid grid-cols-2 gap-4">
                     <input
                       type="text"
@@ -1151,12 +1360,19 @@ Formal Shirt, L, White, 899, 8, 8901234567892, Shirts, FormalFit"
                     {inventory.map(item => (
                       <tr key={item.id} className="border-b hover:bg-gray-50">
                         <td className="px-4 py-3">
-                          <div>
+                          <div className="flex items-center gap-3">
+                            <ProductImage
+                              src={item.imageUrl}
+                              alt={`${item.name} ${item.color || ''} size ${item.size}`}
+                              className="h-12 w-12 shrink-0 rounded-lg"
+                            />
+                            <div>
                             <div className="font-medium text-gray-800">
                               {item.name} ({item.size})
                             </div>
                             <div className="text-sm text-gray-500">
                               {item.color} | {item.category}
+                            </div>
                             </div>
                           </div>
                         </td>
@@ -1425,9 +1641,14 @@ Formal Shirt, L, White, 899, 8, 8901234567892, Shirts, FormalFit"
                     ))}
                   </div>
                   <div className="border-t pt-2 mt-2 flex justify-between items-center">
-                    <div className="font-semibold">
-                      <span>Total: </span>
-                      <span>₹{bill.total}</span>
+                    <div>
+                      <div className="text-sm text-gray-600">
+                        Total items: {bill.items.reduce((total, item) => total + item.quantity, 0)}
+                      </div>
+                      <div className="font-semibold">
+                        <span>Total: </span>
+                        <span>₹{bill.total}</span>
+                      </div>
                     </div>
                     {bill.items.some(item => item.quantity > (item.returnedQuantity || 0)) && (
                       <button
@@ -1559,6 +1780,7 @@ Formal Shirt, L, White, 899, 8, 8901234567892, Shirts, FormalFit"
                         onChange={(e) => {
                           const val = Math.min(maxReturn, Math.max(0, Number(e.target.value) || 0));
                           setReturnQuantities({ ...returnQuantities, [item.id]: val });
+                          setReturnCreditAmount(null);
                         }}
                         className="w-20 px-2 py-1 border border-gray-300 rounded-lg text-center"
                       />
@@ -1566,6 +1788,18 @@ Formal Shirt, L, White, 899, 8, 8901234567892, Shirts, FormalFit"
                   );
                 })}
             </div>
+            <label htmlFor="return-credit-amount" className="block text-sm font-medium text-gray-700 mb-1">
+              Credit note amount (₹)
+            </label>
+            <input
+              id="return-credit-amount"
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={returnCreditAmount ?? calculateReturnCreditAmount().toFixed(2)}
+              onChange={(e) => setReturnCreditAmount(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4"
+            />
             <input
               type="text"
               value={returnNote}
